@@ -1,0 +1,4 @@
+#example-channel-1
+#example-again-2
+#general
+#random
