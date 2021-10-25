@@ -3,6 +3,10 @@ from pathlib import Path
 import datetime, re, time
 import botsettings
 
+# BOT PERMISSION
+#chat:write:bot', 
+# channels:read,groups:read,mpim:read,im:read'channels:write,groups:write,mpim:write,im:write
+# USER PERMISSION -  'needed': 'channels:history,groups:history,mpim:history,im:history'
 
 def message_format(title,message,message2=None):
     """Slack Message Format"""
@@ -27,12 +31,32 @@ def message_format(title,message,message2=None):
 			"fields": [{
 					"type": "mrkdwn",
 					"text": message2}]
-        }       
+        }
         ]
     
     return msg
 
 
+def message_format2(archived_channels):
+    m = "The following channels have archived:\n\n"
+    for achannel in archived_channels:
+        m += "•<#"+achannel+">\n"
+      
+				
+
+    msg = [{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": str(m)
+			}
+		},
+		{
+			"type": "divider"
+		}]
+        
+
+    return msg
 
 def get_token():
     """Get token from text file"""
@@ -41,7 +65,7 @@ def get_token():
     fullpath = path + "token.txt"
     file = open(fullpath,"r")
     
-    return (file.read())
+    return (file.read().split('\n'))
 
 def get_protectedchannels():
     """Get protected channels from text file"""
@@ -108,6 +132,7 @@ def save_conversations(conversations):
 def list_archivables(toarchive_list, private_channel):
     """Create list of channels which the bot will mark for archiving."""
 
+    client = slack.WebClient(token=BOT_TOKEN)
     archivable_channels = toarchive_list[0]
     if archivable_channels:
         archive_date = ((datetime.datetime.now())+datetime.timedelta(days=GRACE_PERIOD))
@@ -122,7 +147,17 @@ def list_archivables(toarchive_list, private_channel):
 
         message = "You can stop a channel from being archived by adding the :X: reaction to a listed channel.\n<https://slack.com/help/articles/213185307-Archive-or-delete-a-channel#h_01FFR2DKWZQZ9BHDMEHBXTFQAW| ~ Recover archived channels by following this guide.>\n"
         client.chat_postMessage(channel=private_channel,text=message, 
-            blocks=[])
+            blocks=[{
+			"type": "section",
+			"text": {
+				"type": "mrkdwn",
+				"text": message
+			}
+		},
+		{
+			"type": "divider"
+		}]
+            )
     
         return (archive_date.strftime("%m/%d/%y"))
     
@@ -134,6 +169,7 @@ def list_archivables(toarchive_list, private_channel):
 def list_nopermissions(toarchive_list,private_channel):
     """Create list of channels which the bot does not have access to."""
 
+    client = slack.WebClient(token=BOT_TOKEN)
     nopermission_channels = toarchive_list[1]
 
     message = "Archive bot does not have have access to the following public channels:\n"
@@ -150,7 +186,7 @@ def list_nopermissions(toarchive_list,private_channel):
 
 def check_message(private_channel):
     """Check the status of messages"""
-    
+    client = slack.WebClient(token=BOT_TOKEN)
     message_history = client.conversations_history(channel=private_channel,limit=5)
     conversation = message_history["messages"]
     for convo in (conversation):
@@ -178,12 +214,22 @@ def check_message(private_channel):
         except Exception as e:
             print(e)
 
-def archive_channel():
+def archive_channel(private_channel):
     """Archive channel if requirements are meant"""
+    archived = []
+    client = slack.WebClient(token=BOT_TOKEN)
+    
     for c in toarchive:
-        print(c)
-        client.conversations_archive(channel=c[0])
-        toarchive.pop(toarchive.index(c))
+        #client.conversations_archive(channel=c[0])
+        archived.append(c[0])
+    
+    # Format message indicating channels that have been archived
+    message = message_format2(archived)
+    client.chat_postMessage(channel=private_channel,text=message, 
+            blocks=message
+            )
+
+
 
 check_date = (datetime.datetime.now()).strftime("%m/%d/%y")
 toarchive, nopermissions = [], []
@@ -201,8 +247,9 @@ while True:
     privatechannel_Solo = "C02HDPP5QUF"
     PRIVATE_CHANNEL_ID = "C02HDPP5QUF" #SETTINGS["PRIVATE_CHANNEL_ID"]
     PROTECTED_CHANNELS = get_protectedchannels()
-    SLACK_TOKEN = get_token()
-    client = slack.WebClient(token=SLACK_TOKEN)
+    BOT_TOKEN = get_token()[0]
+    USER_TOKEN = get_token()[1]
+    client = slack.WebClient(token=USER_TOKEN)
 
     # Check channel for reactions
     check_message(PRIVATE_CHANNEL_ID)
@@ -213,11 +260,12 @@ while True:
         channels = fetch_conversations()
         archive_date =  list_archivables(channels,PRIVATE_CHANNEL_ID)
         list_nopermissions(channels,PRIVATE_CHANNEL_ID)
-        check_date = ((datetime.datetime.now())+datetime.timedelta(days=10)).strftime("%m/%d/%y")
+        check_date = ((datetime.datetime.now())+datetime.timedelta(days=30)).strftime("%m/%d/%y")
 
     # Archive if marked
-    if today == archive_date and current_time == "12:15":
-        archive_channel()
+    if today == archive_date and current_time == "17:07":
+        archive_channel(PRIVATE_CHANNEL_ID)
+        toarchive = []
 
     print("time",today,current_time)
     print("Checking again:",check_date, "Archiving by:",archive_date)
